@@ -7,6 +7,7 @@ export default function Home() {
 
         <ul className="list-disc list-inside">
           <li><a href="/projects/pepes-cube">Pepe&apos;s Cube</a></li>
+          <li><a href="/projects/open-world">Open World</a></li>
         </ul>
       </main>
     </div>
