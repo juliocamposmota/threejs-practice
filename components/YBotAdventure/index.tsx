@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { useEffect, useRef } from "react";
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 
 export default function YBotAdventureScene() {
@@ -10,6 +11,8 @@ export default function YBotAdventureScene() {
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+
+    let disposed = false;
 
     const size = () => {
       const w = container.clientWidth || window.innerWidth;
@@ -28,11 +31,6 @@ export default function YBotAdventureScene() {
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
     camera.position.set(0, 10, 20);
 
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const material = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
-    const cube = new THREE.Mesh(geometry, material);
-    scene.add(cube);
-
     const light = new THREE.AmbientLight( 0x404040 );
     const dirLight = new THREE.DirectionalLight(0xffffff, 5);
     dirLight.position.set(10, 10, 10);
@@ -41,7 +39,18 @@ export default function YBotAdventureScene() {
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
-    controls.autoRotate = true;
+
+    const loader = new GLTFLoader();
+    loader.load(
+      '/ybot.glb',
+      (gltf) => {
+        if (disposed) return;
+        const model = gltf.scene;
+        scene.add(model);
+      },
+      undefined,
+      (err) => console.error('YBot load failed', err),
+    );
 
     let animationId: number;
     const animate = () => {
@@ -53,9 +62,14 @@ export default function YBotAdventureScene() {
     animate();
 
     return () => {
+      disposed = true;
       cancelAnimationFrame(animationId);
+      controls.dispose();
       renderer.dispose();
-      container.removeChild(renderer.domElement);
+
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
     };
   }, []);
 
