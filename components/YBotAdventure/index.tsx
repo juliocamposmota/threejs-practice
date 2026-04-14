@@ -2,6 +2,7 @@
 
 import * as THREE from 'three';
 import { useEffect, useRef } from "react";
+import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 
 export default function YBotAdventureScene() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -25,20 +26,28 @@ export default function YBotAdventureScene() {
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
-    camera.position.set(0, 0, 5);
+    camera.position.set(0, 10, 20);
 
     const geometry = new THREE.BoxGeometry(1, 1, 1);
     const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
     const cube = new THREE.Mesh(geometry, material);
     scene.add(cube);
 
+    const controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableDamping = true;
+    controls.autoRotate = true;
+
+    let animationId: number;
     const animate = () => {
+      controls.update();
       renderer.render(scene, camera);
+      animationId = requestAnimationFrame(animate);
     };
 
     animate();
 
     return () => {
+      cancelAnimationFrame(animationId);
       renderer.dispose();
       container.removeChild(renderer.domElement);
     };
