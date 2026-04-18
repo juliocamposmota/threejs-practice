@@ -7,6 +7,7 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 
 export default function YBotAdventureScene() {
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const controlsRef = useRef({ forward: 0, turn: 0 })
 
   useEffect(() => {
     const container = containerRef.current;
@@ -41,8 +42,8 @@ export default function YBotAdventureScene() {
     scene.add(dirLight);
     scene.add(light);
 
-    const controls = new OrbitControls(camera, renderer.domElement);
-    controls.enableDamping = true;
+    const orbitControls = new OrbitControls(camera, renderer.domElement);
+    orbitControls.enableDamping = true;
 
     const loader = new GLTFLoader();
     loader.load(
@@ -70,7 +71,31 @@ export default function YBotAdventureScene() {
 
     function updateCharacter(delta: number) {
       if (mixer) mixer.update(delta);
-      controls.update();
+      orbitControls.update();
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      const controls = controlsRef.current;
+
+      switch (event.code) {
+        case 'KeyW': controls.forward = 1; break;
+        case 'KeyS': controls.forward = -1; break;
+        case 'KeyA': controls.turn = 1; break;
+        case 'KeyD': controls.turn = -1; break;
+        default: break;
+      }
+    }
+
+    function onKeyUp(event: KeyboardEvent) {
+      const controls = controlsRef.current;
+
+      switch (event.code) {
+        case 'KeyW': controls.forward = 0; break;
+        case 'KeyS': controls.forward = 0; break;
+        case 'KeyA': controls.turn = 0; break;
+        case 'KeyD': controls.turn = 0; break;
+        default: break;
+      }
     }
 
     const animate = () => {
@@ -81,13 +106,18 @@ export default function YBotAdventureScene() {
       animationId = requestAnimationFrame(animate);
     };
 
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('keyup', onKeyUp);
+
     animate();
 
     return () => {
       mounted = false;
       mixer?.stopAllAction();
       cancelAnimationFrame(animationId);
-      controls.dispose();
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('keyup', onKeyUp);
+      orbitControls.dispose();
       renderer.dispose();
 
       if (container.contains(renderer.domElement)) {
