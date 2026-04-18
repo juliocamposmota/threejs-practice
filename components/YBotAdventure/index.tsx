@@ -12,7 +12,10 @@ export default function YBotAdventureScene() {
     const container = containerRef.current;
     if (!container) return;
 
-    let disposed = false;
+    let mounted = true;
+    let animationId: number;
+    let mixer: THREE.AnimationMixer | null = null;
+    let actions: Record<string, THREE.AnimationAction> | null = null;
 
     const size = () => {
       const w = container.clientWidth || window.innerWidth;
@@ -22,6 +25,7 @@ export default function YBotAdventureScene() {
 
     const { width, height } = size();
 
+    const clock = new THREE.Clock();
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -44,17 +48,35 @@ export default function YBotAdventureScene() {
     loader.load(
       '/ybot.glb',
       (gltf) => {
-        if (disposed) return;
-        const model = gltf.scene;
+        if (!mounted) return;
+        const { scene: model, animations } = gltf;
+
         scene.add(model);
+
+        mixer = new THREE.AnimationMixer(model);
+
+        actions = {
+          Idle: mixer.clipAction(animations[0]),
+          JumpingUp: mixer.clipAction(animations[1]),
+          Running: mixer.clipAction(animations[2]),
+          Walking: mixer.clipAction(animations[3]),
+        }
+
+        actions.Idle.play();
       },
       undefined,
       (err) => console.error('YBot load failed', err),
     );
 
-    let animationId: number;
-    const animate = () => {
+    function updateCharacter(delta: number) {
+      if (mixer) mixer.update(delta);
       controls.update();
+    }
+
+    const animate = () => {
+      if (!mounted) return;
+      const delta = clock.getDelta();
+      updateCharacter(delta);
       renderer.render(scene, camera);
       animationId = requestAnimationFrame(animate);
     };
@@ -62,7 +84,8 @@ export default function YBotAdventureScene() {
     animate();
 
     return () => {
-      disposed = true;
+      mounted = false;
+      mixer?.stopAllAction();
       cancelAnimationFrame(animationId);
       controls.dispose();
       renderer.dispose();
