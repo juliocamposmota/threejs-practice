@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 
-type Animations = 'Idle' | 'Walking';
+type Animations = 'Idle' | 'Walking' | 'Running';
 
 export default function YBotAdventureScene() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -13,6 +13,7 @@ export default function YBotAdventureScene() {
   const facingTurnSpeed = 8;
   const fadeDuration = 0.25;
   const walkSpeed = 2.0;
+  const runSpeed = 4.0;
   const characterHeight = 1.0;
   const rayStartOffset = 2.0;
 
@@ -162,6 +163,8 @@ export default function YBotAdventureScene() {
       inputDirection.set(moveX, 0, moveZ);
 
       const isMoving = inputDirection.lengthSq() > 0;
+      const isRunning = keys.has('ShiftLeft');
+      const speed = isRunning ? runSpeed : walkSpeed;
 
       if (isMoving) {
         const azimuth = orbitControls.getAzimuthalAngle();
@@ -173,7 +176,7 @@ export default function YBotAdventureScene() {
 
         targetQuaternion.setFromAxisAngle(upAxis, targetYaw);
         playerGroup.quaternion.rotateTowards(targetQuaternion, facingTurnSpeed * delta);
-        playerGroup.position.addScaledVector(inputDirection, walkSpeed * delta);
+        playerGroup.position.addScaledVector(inputDirection, speed * delta);
       }
 
       snapCharacterToGround();
@@ -183,28 +186,43 @@ export default function YBotAdventureScene() {
       orbitControls.target.copy(playerGroup.position).add(cameraFollowOffset);
       previousPlayerPosition.copy(playerGroup.position);
 
-      if (isMoving) setAnimation('Walking');
-      else setAnimation('Idle');  
+      if (!isMoving) {
+        setAnimation('Idle');
+      } else if (isRunning) {
+        setAnimation('Running');
+      } else {
+        setAnimation('Walking');
+      }  
     }
 
     function onKeyDown(event: KeyboardEvent) {
-      // optional: ignore auto-repeat noise
       if (event.repeat) return;
 
       const { code } = event;
 
-      if (code === 'KeyW' || code === 'KeyS' || code === 'KeyA' || code === 'KeyD') {
+      if (
+        code === 'KeyW' ||
+        code === 'KeyS' ||
+        code === 'KeyA' ||
+        code === 'KeyD' ||
+        code === 'ShiftLeft'
+      ) {
         pressedKeysRef.current.add(code);
       }
     }
 
     function onKeyUp(event: KeyboardEvent) {
-      // optional: ignore auto-repeat noise
       if (event.repeat) return;
 
       const { code } = event;
 
-      if (code === 'KeyW' || code === 'KeyA' || code === 'KeyS' || code === 'KeyD') {
+      if (
+        code === 'KeyW' ||
+        code === 'KeyA' ||
+        code === 'KeyS' ||
+        code === 'KeyD' ||
+        code === 'ShiftLeft'
+      ) {
         pressedKeysRef.current.delete(code);
       }
     }
