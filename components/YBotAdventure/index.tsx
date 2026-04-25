@@ -9,7 +9,7 @@ type Animations = 'Idle' | 'Walking';
 
 export default function YBotAdventureScene() {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const controlsRef = useRef({ forward: 0, turn: 0 })
+  const pressedKeysRef = useRef<Set<string>>(new Set());
   const fadeDuration = 0.25;
   const rotateSpeed = 2.0;
   const walkSpeed = 2.0;
@@ -55,7 +55,7 @@ export default function YBotAdventureScene() {
     const orbitControls = new OrbitControls(camera, renderer.domElement);
     orbitControls.enableDamping = true;
 
-    const worldForward = new THREE.Vector3();
+    const inputDirection = new THREE.Vector3();
 
     const loader = new GLTFLoader();
     loader.load(
@@ -93,6 +93,12 @@ export default function YBotAdventureScene() {
       (err) => console.error('YBot load failed', err),
     );
 
+    function getMoveAxes(keys: Set<string>) {
+      const x = (keys.has('KeyD') ? 1 : 0) + (keys.has('KeyA') ? -1 : 0);
+      const z = (keys.has('KeyW') ? 1 : 0) + (keys.has('KeyS') ? -1 : 0);
+      return { x, z };
+    }
+
     function setAnimation(animation: Animations) {
       if (!actions) return;
       if (currentAnimation === animation) return;
@@ -112,41 +118,47 @@ export default function YBotAdventureScene() {
     }
 
     function updateCharacter(delta: number) {
-      const { forward, turn } = controlsRef.current;
+      const keys = pressedKeysRef.current;
+      const { x: moveX, z: moveZ } = getMoveAxes(keys);
 
-      playerGroup.rotateY(turn * rotateSpeed * delta);
-      playerGroup.getWorldDirection(worldForward);
-      playerGroup.position.addScaledVector(worldForward, forward * walkSpeed * delta);
+      inputDirection.set(moveX, 0, moveZ).normalize();
 
-      if (forward !== 0) {
+      const isMoving = inputDirection.lengthSq() > 0;
+      if (isMoving) inputDirection.normalize();
+
+      playerGroup.position.addScaledVector(inputDirection, walkSpeed * delta);
+
+      if (isMoving) {
         setAnimation('Walking');
       } else {
-        setAnimation('Idle');
+        setAnimation('Idle');  
       }
     }
 
     function onKeyDown(event: KeyboardEvent) {
-      const controls = controlsRef.current;
+      // optional: ignore auto-repeat noise
+      if (event.repeat) return;
 
-      switch (event.code) {
-        case 'KeyW': controls.forward = 1; break;
-        case 'KeyS': controls.forward = -1; break;
-        case 'KeyA': controls.turn = 1; break;
-        case 'KeyD': controls.turn = -1; break;
-        default: break;
+      const { code } = event;
+
+      if (code === 'KeyW' || code === 'KeyS' || code === 'KeyA' || code === 'KeyD') {
+        pressedKeysRef.current.add(code);
       }
     }
 
     function onKeyUp(event: KeyboardEvent) {
-      const controls = controlsRef.current;
+      // optional: ignore auto-repeat noise
+      if (event.repeat) return;
 
-      switch (event.code) {
-        case 'KeyW': controls.forward = 0; break;
-        case 'KeyS': controls.forward = 0; break;
-        case 'KeyA': controls.turn = 0; break;
-        case 'KeyD': controls.turn = 0; break;
-        default: break;
+      const { code } = event;
+
+      if (code === 'KeyW' || code === 'KeyA' || code === 'KeyS' || code === 'KeyD') {
+        pressedKeysRef.current.delete(code);
       }
+    }
+
+    function onWindowBlur() {
+      pressedKeysRef.current.clear();
     }
 
     const animate = () => {
@@ -161,6 +173,7 @@ export default function YBotAdventureScene() {
 
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('keyup', onKeyUp);
+    window.addEventListener('blur', onWindowBlur);
 
     animate();
 
@@ -170,6 +183,7 @@ export default function YBotAdventureScene() {
       cancelAnimationFrame(animationId);
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onWindowBlur);
       orbitControls.dispose();
       renderer.dispose();
 
