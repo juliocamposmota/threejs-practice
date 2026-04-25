@@ -5,9 +5,12 @@ import { useEffect, useRef } from "react";
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 
+type Animations = 'Idle' | 'Walking';
+
 export default function YBotAdventureScene() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef({ forward: 0, turn: 0 })
+  const fadeDuration = 0.25;
   const rotateSpeed = 2.0;
   const walkSpeed = 2.0;
 
@@ -19,6 +22,7 @@ export default function YBotAdventureScene() {
     let animationId: number;
     let mixer: THREE.AnimationMixer | null = null;
     let actions: Record<string, THREE.AnimationAction> | null = null;
+    let currentAnimation: Animations = 'Idle';
 
     const size = () => {
       const w = container.clientWidth || window.innerWidth;
@@ -64,11 +68,23 @@ export default function YBotAdventureScene() {
 
         mixer = new THREE.AnimationMixer(model);
 
+        const idleClip = THREE.AnimationClip.findByName(animations, 'idle');
+        const jumpingUpClip = THREE.AnimationClip.findByName(animations, 'jumping_up');
+        const runningClip = THREE.AnimationClip.findByName(animations, 'running');
+        const walkingClip = THREE.AnimationClip.findByName(animations, 'walking');
+
         actions = {
-          Idle: mixer.clipAction(animations[0]),
-          JumpingUp: mixer.clipAction(animations[1]),
-          Running: mixer.clipAction(animations[2]),
-          Walking: mixer.clipAction(animations[3]),
+          Idle: mixer.clipAction(idleClip!),
+          JumpingUp: mixer.clipAction(jumpingUpClip!),
+          Running: mixer.clipAction(runningClip!),
+          Walking: mixer.clipAction(walkingClip!),
+        }
+
+        for (const key of Object.keys(actions)) {
+          const action = actions[key];
+          action.enabled = true;
+          action.setEffectiveTimeScale(1);
+          if (key !== 'Idle') action.setEffectiveWeight(0);
         }
 
         actions.Idle.play();
@@ -77,12 +93,36 @@ export default function YBotAdventureScene() {
       (err) => console.error('YBot load failed', err),
     );
 
+    function setAnimation(animation: Animations) {
+      if (!actions) return;
+      if (currentAnimation === animation) return;
+
+      const from = actions[currentAnimation];
+      const to = actions[animation];
+
+      to.reset()
+        .setEffectiveWeight(1)
+        .fadeIn(fadeDuration)
+        .setEffectiveTimeScale(1)
+        .play();
+
+      from.fadeOut(fadeDuration);
+
+      currentAnimation = animation;
+    }
+
     function updateCharacter(delta: number) {
       const { forward, turn } = controlsRef.current;
 
       playerGroup.rotateY(turn * rotateSpeed * delta);
       playerGroup.getWorldDirection(worldForward);
       playerGroup.position.addScaledVector(worldForward, forward * walkSpeed * delta);
+
+      if (forward !== 0) {
+        setAnimation('Walking');
+      } else {
+        setAnimation('Idle');
+      }
     }
 
     function onKeyDown(event: KeyboardEvent) {
