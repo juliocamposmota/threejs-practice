@@ -13,6 +13,8 @@ export default function YBotAdventureScene() {
   const facingTurnSpeed = 8;
   const fadeDuration = 0.25;
   const walkSpeed = 2.0;
+  const characterHeight = 1.0;
+  const rayStartOffset = 2.0;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -52,12 +54,28 @@ export default function YBotAdventureScene() {
     scene.add(dirLight);
     scene.add(light);
 
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.9, metalness: 0.0 })
+    );
+
+    floor.rotation.x = -Math.PI / 2;
+    floor.receiveShadow = true;
+    scene.add(floor);
+
     const orbitControls = new OrbitControls(camera, renderer.domElement);
     orbitControls.enableDamping = true;
 
+    // controls direction
     const inputDirection = new THREE.Vector3();
     const upAxis = new THREE.Vector3(0, 1, 0);
     const targetQuaternion = new THREE.Quaternion();
+
+    // floor raycast
+    const groundRay = new THREE.Raycaster();
+    const rayOrigin = new THREE.Vector3();
+    const down = new THREE.Vector3(0, -1, 0);
+    const raycastTargets: THREE.Object3D[] = [floor];
 
     const loader = new GLTFLoader();
     loader.load(
@@ -94,6 +112,16 @@ export default function YBotAdventureScene() {
       undefined,
       (err) => console.error('YBot load failed', err),
     );
+
+    function snapCharacterToGround() {
+      rayOrigin.copy(playerGroup.position);
+      rayOrigin.y += rayStartOffset;
+      groundRay.set(rayOrigin, down);
+      const hits = groundRay.intersectObjects(raycastTargets, false);
+      if (hits.length === 0) return;
+      const hitY = hits[0].point.y;
+      playerGroup.position.y = hitY + characterHeight;
+    }
 
     function getMoveAxes(keys: Set<string>) {
       const x = (keys.has('KeyD') ? 1 : 0) + (keys.has('KeyA') ? -1 : 0);
@@ -137,6 +165,8 @@ export default function YBotAdventureScene() {
         playerGroup.quaternion.rotateTowards(targetQuaternion, facingTurnSpeed * delta);
         playerGroup.position.addScaledVector(inputDirection, walkSpeed * delta);
       }
+
+      snapCharacterToGround();
 
       if (isMoving) setAnimation('Walking');
       else setAnimation('Idle');  
