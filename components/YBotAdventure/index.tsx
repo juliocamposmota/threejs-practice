@@ -58,10 +58,12 @@ export default function YBotAdventureScene() {
       new THREE.PlaneGeometry(200, 200),
       new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.9, metalness: 0.0 })
     );
+    const grid = new THREE.GridHelper(200, 40, 0x666666, 0x333333);
 
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     scene.add(floor);
+    scene.add(grid);
 
     const orbitControls = new OrbitControls(camera, renderer.domElement);
     orbitControls.enableDamping = true;
