@@ -35,6 +35,8 @@ Walk vs idle, fadeIn/fadeOut or crossfading pattern. Output: smooth transition w
 11. Ground + simple collision
 Raycaster downward from character, snap to floor height. Output: no sinking into the plane.
 
+12. Refactor the controls to 8-direction
+
 ### Blender + Mixamo first steps
 
 1. Find the models
