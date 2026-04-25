@@ -10,8 +10,8 @@ type Animations = 'Idle' | 'Walking';
 export default function YBotAdventureScene() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const pressedKeysRef = useRef<Set<string>>(new Set());
+  const facingTurnSpeed = 8;
   const fadeDuration = 0.25;
-  const rotateSpeed = 2.0;
   const walkSpeed = 2.0;
 
   useEffect(() => {
@@ -56,6 +56,8 @@ export default function YBotAdventureScene() {
     orbitControls.enableDamping = true;
 
     const inputDirection = new THREE.Vector3();
+    const upAxis = new THREE.Vector3(0, 1, 0);
+    const targetQuaternion = new THREE.Quaternion();
 
     const loader = new GLTFLoader();
     loader.load(
@@ -95,7 +97,7 @@ export default function YBotAdventureScene() {
 
     function getMoveAxes(keys: Set<string>) {
       const x = (keys.has('KeyD') ? 1 : 0) + (keys.has('KeyA') ? -1 : 0);
-      const z = (keys.has('KeyW') ? 1 : 0) + (keys.has('KeyS') ? -1 : 0);
+      const z = (keys.has('KeyW') ? -1 : 0) + (keys.has('KeyS') ? 1 : 0);
       return { x, z };
     }
 
@@ -121,18 +123,23 @@ export default function YBotAdventureScene() {
       const keys = pressedKeysRef.current;
       const { x: moveX, z: moveZ } = getMoveAxes(keys);
 
-      inputDirection.set(moveX, 0, moveZ).normalize();
+      inputDirection.set(moveX, 0, moveZ);
 
       const isMoving = inputDirection.lengthSq() > 0;
-      if (isMoving) inputDirection.normalize();
-
-      playerGroup.position.addScaledVector(inputDirection, walkSpeed * delta);
 
       if (isMoving) {
-        setAnimation('Walking');
-      } else {
-        setAnimation('Idle');  
+        const azimuth = orbitControls.getAzimuthalAngle();
+        const targetYaw = Math.atan2(inputDirection.x, inputDirection.z);
+        
+        inputDirection.normalize();
+        inputDirection.applyAxisAngle(upAxis, azimuth);
+        targetQuaternion.setFromAxisAngle(upAxis, targetYaw);
+        playerGroup.quaternion.rotateTowards(targetQuaternion, facingTurnSpeed * delta);
+        playerGroup.position.addScaledVector(inputDirection, walkSpeed * delta);
       }
+
+      if (isMoving) setAnimation('Walking');
+      else setAnimation('Idle');  
     }
 
     function onKeyDown(event: KeyboardEvent) {
