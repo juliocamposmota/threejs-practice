@@ -8,6 +8,8 @@ import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 export default function YBotAdventureScene() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const controlsRef = useRef({ forward: 0, turn: 0 })
+  const rotateSpeed = 2.0;
+  const walkSpeed = 2.0;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -33,6 +35,10 @@ export default function YBotAdventureScene() {
     container.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
+    const playerGroup = new THREE.Group();
+
+    scene.add(playerGroup);
+
     const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 100);
     camera.position.set(0, 10, 20);
 
@@ -45,6 +51,8 @@ export default function YBotAdventureScene() {
     const orbitControls = new OrbitControls(camera, renderer.domElement);
     orbitControls.enableDamping = true;
 
+    const worldForward = new THREE.Vector3();
+
     const loader = new GLTFLoader();
     loader.load(
       '/ybot.glb',
@@ -52,7 +60,7 @@ export default function YBotAdventureScene() {
         if (!mounted) return;
         const { scene: model, animations } = gltf;
 
-        scene.add(model);
+        playerGroup.add(model);
 
         mixer = new THREE.AnimationMixer(model);
 
@@ -70,8 +78,11 @@ export default function YBotAdventureScene() {
     );
 
     function updateCharacter(delta: number) {
-      if (mixer) mixer.update(delta);
-      orbitControls.update();
+      const { forward, turn } = controlsRef.current;
+
+      playerGroup.rotateY(turn * rotateSpeed * delta);
+      playerGroup.getWorldDirection(worldForward);
+      playerGroup.position.addScaledVector(worldForward, forward * walkSpeed * delta);
     }
 
     function onKeyDown(event: KeyboardEvent) {
@@ -102,6 +113,8 @@ export default function YBotAdventureScene() {
       if (!mounted) return;
       const delta = clock.getDelta();
       updateCharacter(delta);
+      if (mixer) mixer.update(delta);
+      orbitControls.update();
       renderer.render(scene, camera);
       animationId = requestAnimationFrame(animate);
     };
