@@ -77,6 +77,12 @@ export default function YBotAdventureScene() {
     const down = new THREE.Vector3(0, -1, 0);
     const raycastTargets: THREE.Object3D[] = [floor];
 
+    // camera following
+    const cameraFollowOffset = new THREE.Vector3(0, 1.0, 0);
+    const previousPlayerPosition = new THREE.Vector3();
+    const framePlayerDelta = new THREE.Vector3();
+    previousPlayerPosition.copy(playerGroup.position);
+
     const loader = new GLTFLoader();
     loader.load(
       '/ybot.glb',
@@ -157,16 +163,23 @@ export default function YBotAdventureScene() {
 
       if (isMoving) {
         const azimuth = orbitControls.getAzimuthalAngle();
-        const targetYaw = Math.atan2(inputDirection.x, inputDirection.z);
         
         inputDirection.normalize();
         inputDirection.applyAxisAngle(upAxis, azimuth);
+
+        const targetYaw = Math.atan2(inputDirection.x, inputDirection.z);
+
         targetQuaternion.setFromAxisAngle(upAxis, targetYaw);
         playerGroup.quaternion.rotateTowards(targetQuaternion, facingTurnSpeed * delta);
         playerGroup.position.addScaledVector(inputDirection, walkSpeed * delta);
       }
 
       snapCharacterToGround();
+
+      framePlayerDelta.copy(playerGroup.position).sub(previousPlayerPosition);
+      camera.position.add(framePlayerDelta);
+      orbitControls.target.copy(playerGroup.position).add(cameraFollowOffset);
+      previousPlayerPosition.copy(playerGroup.position);
 
       if (isMoving) setAnimation('Walking');
       else setAnimation('Idle');  
