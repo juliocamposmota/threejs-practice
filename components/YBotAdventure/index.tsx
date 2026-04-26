@@ -24,6 +24,8 @@ export default function YBotAdventureScene() {
     let mounted = true;
     let animationId: number;
     let isJumpingUp = false;
+    let isMoving = false;
+    let isRunning = false;
     let jumpingUpRequested = false;
     let mixer: THREE.AnimationMixer | null = null;
     let actions: Record<string, THREE.AnimationAction> | null = null;
@@ -128,7 +130,7 @@ export default function YBotAdventureScene() {
       (err) => console.error('YBot load failed', err),
     );
 
-    function playJumpingUpOnce() {
+    function playJumpingUp() {
       if (!actions || isJumpingUp) return;
       isJumpingUp = true;
       const from = actions[currentAnimation];
@@ -153,14 +155,7 @@ export default function YBotAdventureScene() {
       action.getMixer()?.removeEventListener('finished', onJumpingUpFinished);
       isJumpingUp = false;
 
-      const keys = pressedKeysRef.current;
-      const { x, z } = getMoveAxes(keys);
-      const moving = x !== 0 || z !== 0;
-      const running = keys.has('ShiftLeft');
-
-      if (!moving) setAnimation('Idle');
-      else if (running) setAnimation('Running');
-      else setAnimation('Walking');
+      handleSetAnimation();
     }
 
     function snapCharacterToGround() {
@@ -197,19 +192,26 @@ export default function YBotAdventureScene() {
       currentAnimation = animation;
     }
 
+    function handleSetAnimation() {
+      if (!isMoving) setAnimation('Idle');
+      else if (isRunning) setAnimation('Running');
+      else setAnimation('Walking');
+    }
+
     function updateCharacter(delta: number) {
       const keys = pressedKeysRef.current;
       const { x: moveX, z: moveZ } = getMoveAxes(keys);
 
       inputDirection.set(moveX, 0, moveZ);
 
-      const isMoving = inputDirection.lengthSq() > 0;
-      const isRunning = keys.has('ShiftLeft');
+      isMoving = inputDirection.lengthSq() > 0;
+      isRunning = keys.has('ShiftLeft');
+
       const speed = isRunning ? runSpeed : walkSpeed;
 
       if (jumpingUpRequested && !isJumpingUp) {
         jumpingUpRequested = false;
-        if (!isRunning) playJumpingUpOnce();
+        if (!isRunning) playJumpingUp();
       }
 
       if (!isJumpingUp && isMoving) {
@@ -232,11 +234,7 @@ export default function YBotAdventureScene() {
       orbitControls.target.copy(playerGroup.position).add(cameraFollowOffset);
       previousPlayerPosition.copy(playerGroup.position);
 
-      if (!isJumpingUp) {
-        if (!isMoving) setAnimation('Idle');
-        else if (isRunning) setAnimation('Running');
-        else setAnimation('Walking');
-      }
+      if (!isJumpingUp) handleSetAnimation();
     }
 
     function onKeyDown(event: KeyboardEvent) {
