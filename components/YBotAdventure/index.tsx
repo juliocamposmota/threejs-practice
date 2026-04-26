@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 
-type Animations = 'Idle' | 'Walking' | 'Running';
+type Animations = 'Idle' | 'Walking' | 'Running' | 'JumpingUp';
 
 export default function YBotAdventureScene() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -23,6 +23,8 @@ export default function YBotAdventureScene() {
 
     let mounted = true;
     let animationId: number;
+    let isJumpingUp = false;
+    let jumpingUpRequested = false;
     let mixer: THREE.AnimationMixer | null = null;
     let actions: Record<string, THREE.AnimationAction> | null = null;
     let currentAnimation: Animations = 'Idle';
@@ -116,11 +118,50 @@ export default function YBotAdventureScene() {
           if (key !== 'Idle') action.setEffectiveWeight(0);
         }
 
+        const jumpingUp = actions.JumpingUp;
+        jumpingUp.setLoop(THREE.LoopOnce, 1);
+        jumpingUp.clampWhenFinished = true;
+
         actions.Idle.play();
       },
       undefined,
       (err) => console.error('YBot load failed', err),
     );
+
+    function playJumpingUpOnce() {
+      if (!actions || isJumpingUp) return;
+      isJumpingUp = true;
+      const from = actions[currentAnimation];
+      const jumpingUp = actions.JumpingUp;
+
+      jumpingUp
+        .reset()
+        .setEffectiveTimeScale(1)
+        .setEffectiveWeight(1)
+        .fadeIn(fadeDuration)
+        .play();
+
+      from.fadeOut(fadeDuration);
+      currentAnimation = 'JumpingUp';
+      jumpingUp.getMixer()?.addEventListener('finished', onJumpingUpFinished);
+    }
+
+    function onJumpingUpFinished(e: THREE.Event) {
+      const action = (e as unknown as { action?: THREE.AnimationAction }).action;
+      if (!action || action !== actions!.JumpingUp) return;
+    
+      action.getMixer()?.removeEventListener('finished', onJumpingUpFinished);
+      isJumpingUp = false;
+
+      const keys = pressedKeysRef.current;
+      const { x, z } = getMoveAxes(keys);
+      const moving = x !== 0 || z !== 0;
+      const running = keys.has('ShiftLeft');
+
+      if (!moving) setAnimation('Idle');
+      else if (running) setAnimation('Running');
+      else setAnimation('Walking');
+    }
 
     function snapCharacterToGround() {
       rayOrigin.copy(playerGroup.position);
@@ -166,7 +207,12 @@ export default function YBotAdventureScene() {
       const isRunning = keys.has('ShiftLeft');
       const speed = isRunning ? runSpeed : walkSpeed;
 
-      if (isMoving) {
+      if (jumpingUpRequested && !isJumpingUp) {
+        jumpingUpRequested = false;
+        if (!isRunning) playJumpingUpOnce();
+      }
+
+      if (!isJumpingUp && isMoving) {
         const azimuth = orbitControls.getAzimuthalAngle();
         
         inputDirection.normalize();
@@ -179,26 +225,30 @@ export default function YBotAdventureScene() {
         playerGroup.position.addScaledVector(inputDirection, speed * delta);
       }
 
-      snapCharacterToGround();
+      if (!isJumpingUp) snapCharacterToGround();
 
       framePlayerDelta.copy(playerGroup.position).sub(previousPlayerPosition);
       camera.position.add(framePlayerDelta);
       orbitControls.target.copy(playerGroup.position).add(cameraFollowOffset);
       previousPlayerPosition.copy(playerGroup.position);
 
-      if (!isMoving) {
-        setAnimation('Idle');
-      } else if (isRunning) {
-        setAnimation('Running');
-      } else {
-        setAnimation('Walking');
-      }  
+      if (!isJumpingUp) {
+        if (!isMoving) setAnimation('Idle');
+        else if (isRunning) setAnimation('Running');
+        else setAnimation('Walking');
+      }
     }
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.repeat) return;
 
       const { code } = event;
+
+      if (event.code === 'Space') {
+        event.preventDefault();
+        jumpingUpRequested = true;
+        return;
+      }
 
       if (
         code === 'KeyW' ||
