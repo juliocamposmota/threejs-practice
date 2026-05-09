@@ -14,7 +14,6 @@ export default function YBotAdventureScene() {
   const fadeDuration = 0.25;
   const walkSpeed = 2.0;
   const runSpeed = 4.0;
-  const characterHeight = 1.0;
   const rayStartOffset = 2.0;
 
   useEffect(() => {
@@ -216,7 +215,7 @@ export default function YBotAdventureScene() {
       const hits = groundRay.intersectObjects(raycastTargets, false);
       if (hits.length === 0) return;
       const hitY = hits[0].point.y;
-      playerGroup.position.y = hitY + characterHeight;
+      playerGroup.position.y = hitY;
     }
 
     function getMoveAxes(keys: Set<string>) {
