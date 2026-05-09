@@ -5,7 +5,7 @@ import { useEffect, useRef } from "react";
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 
-type Animations = 'Idle' | 'Walking' | 'Running' | 'JumpingUp';
+type Animations = 'Idle' | 'Walking' | 'Running' | 'JumpingUp' | 'JumpRunning';
 
 export default function YBotAdventureScene() {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -23,10 +23,12 @@ export default function YBotAdventureScene() {
 
     let mounted = true;
     let animationId: number;
-    let isJumpingUp = false;
     let isMoving = false;
     let isRunning = false;
+    let isJumpingUp = false;
+    let isJumpRunning = false;
     let jumpingUpRequested = false;
+    let jumpRunningRequested = false;
     let mixer: THREE.AnimationMixer | null = null;
     let actions: Record<string, THREE.AnimationAction> | null = null;
     let currentAnimation: Animations = 'Idle';
@@ -75,6 +77,7 @@ export default function YBotAdventureScene() {
 
     // controls direction
     const inputDirection = new THREE.Vector3();
+    const jumpRunningDirection = new THREE.Vector3();
     const upAxis = new THREE.Vector3(0, 1, 0);
     const targetQuaternion = new THREE.Quaternion();
 
@@ -102,15 +105,17 @@ export default function YBotAdventureScene() {
         mixer = new THREE.AnimationMixer(model);
 
         const idleClip = THREE.AnimationClip.findByName(animations, 'idle');
-        const jumpingUpClip = THREE.AnimationClip.findByName(animations, 'jumping_up');
-        const runningClip = THREE.AnimationClip.findByName(animations, 'running');
         const walkingClip = THREE.AnimationClip.findByName(animations, 'walking');
+        const runningClip = THREE.AnimationClip.findByName(animations, 'running');
+        const jumpingUpClip = THREE.AnimationClip.findByName(animations, 'jumping_up');
+        const jumpRunningClip = THREE.AnimationClip.findByName(animations, 'jump_running');
 
         actions = {
           Idle: mixer.clipAction(idleClip!),
-          JumpingUp: mixer.clipAction(jumpingUpClip!),
-          Running: mixer.clipAction(runningClip!),
           Walking: mixer.clipAction(walkingClip!),
+          Running: mixer.clipAction(runningClip!),
+          JumpingUp: mixer.clipAction(jumpingUpClip!),
+          JumpRunning: mixer.clipAction(jumpRunningClip!),
         }
 
         for (const key of Object.keys(actions)) {
@@ -123,6 +128,10 @@ export default function YBotAdventureScene() {
         const jumpingUp = actions.JumpingUp;
         jumpingUp.setLoop(THREE.LoopOnce, 1);
         jumpingUp.clampWhenFinished = true;
+
+        const jumpRunning = actions.JumpRunning;
+        jumpRunning.setLoop(THREE.LoopOnce, 1);
+        jumpRunning.clampWhenFinished = true;
 
         actions.Idle.play();
       },
@@ -154,6 +163,48 @@ export default function YBotAdventureScene() {
     
       action.getMixer()?.removeEventListener('finished', onJumpingUpFinished);
       isJumpingUp = false;
+
+      handleSetAnimation();
+    }
+
+    function playJumpRunning() {
+      if (!actions || isJumpRunning) return;
+      isJumpRunning = true;
+
+      const keys = pressedKeysRef.current;
+      const { x: moveX, z: moveZ } = getMoveAxes(keys);
+
+      jumpRunningDirection.set(moveX, 0, moveZ);
+
+      if (jumpRunningDirection.lengthSq() > 0) {
+        jumpRunningDirection.normalize();
+        const azimuth = orbitControls.getAzimuthalAngle();
+        jumpRunningDirection.applyAxisAngle(upAxis, azimuth);
+      } else {
+        jumpRunningDirection.set(0, 0, -1).applyQuaternion(playerGroup.quaternion);
+      }
+
+      const from = actions[currentAnimation];
+      const jumpRunning = actions.JumpRunning;
+
+      jumpRunning
+        .reset()
+        .setEffectiveTimeScale(1)
+        .setEffectiveWeight(1)
+        .fadeIn(fadeDuration)
+        .play();
+
+      from.fadeOut(fadeDuration);
+      currentAnimation = 'JumpRunning';
+      jumpRunning.getMixer()?.addEventListener('finished', onJumpRunningFinished);
+    }
+
+    function onJumpRunningFinished(e: THREE.Event) {
+      const action = (e as unknown as { action?: THREE.AnimationAction }).action;
+      if (!action || action !== actions!.JumpRunning) return;
+
+      action.getMixer()?.removeEventListener('finished', onJumpRunningFinished);
+      isJumpRunning = false;
 
       handleSetAnimation();
     }
@@ -214,9 +265,14 @@ export default function YBotAdventureScene() {
         if (!isRunning) playJumpingUp();
       }
 
-      if (!isJumpingUp && isMoving) {
+      if (jumpRunningRequested && !isJumpRunning) {
+        jumpRunningRequested = false;
+        if (isRunning) playJumpRunning();
+      }
+
+      if (!isJumpingUp && !isJumpRunning && isMoving) {
         const azimuth = orbitControls.getAzimuthalAngle();
-        
+
         inputDirection.normalize();
         inputDirection.applyAxisAngle(upAxis, azimuth);
 
@@ -225,16 +281,18 @@ export default function YBotAdventureScene() {
         targetQuaternion.setFromAxisAngle(upAxis, targetYaw);
         playerGroup.quaternion.rotateTowards(targetQuaternion, facingTurnSpeed * delta);
         playerGroup.position.addScaledVector(inputDirection, speed * delta);
+      } else if (isJumpRunning) {
+        playerGroup.position.addScaledVector(jumpRunningDirection, speed * delta);
       }
 
-      if (!isJumpingUp) snapCharacterToGround();
+      if (!isJumpingUp && !isJumpRunning) snapCharacterToGround();
 
       framePlayerDelta.copy(playerGroup.position).sub(previousPlayerPosition);
       camera.position.add(framePlayerDelta);
       orbitControls.target.copy(playerGroup.position).add(cameraFollowOffset);
       previousPlayerPosition.copy(playerGroup.position);
 
-      if (!isJumpingUp) handleSetAnimation();
+      if (!isJumpingUp && !isJumpRunning) handleSetAnimation();
     }
 
     function onKeyDown(event: KeyboardEvent) {
@@ -244,7 +302,13 @@ export default function YBotAdventureScene() {
 
       if (event.code === 'Space') {
         event.preventDefault();
-        jumpingUpRequested = true;
+
+        if (pressedKeysRef.current.has('ShiftLeft')) {
+          jumpRunningRequested = true;
+        } else {
+          jumpingUpRequested = true;
+        }
+
         return;
       }
 
