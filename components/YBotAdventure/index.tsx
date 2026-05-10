@@ -5,6 +5,15 @@ import { useEffect, useRef } from "react";
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {OrbitControls} from 'three/addons/controls/OrbitControls.js';
 
+const PAVING_TEXTURE_BASE = '/texture/paving_stones/paving_stones';
+const FLOOR_TEXTURE_REPEAT = 40;
+
+function tileTexture(tex: THREE.Texture, repeatU: number, repeatV: number) {
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  tex.repeat.set(repeatU, repeatV);
+}
+
 type Animations = 'Idle' | 'Walking' | 'Running' | 'JumpingUp' | 'JumpRunning';
 
 export default function YBotAdventureScene() {
@@ -62,14 +71,58 @@ export default function YBotAdventureScene() {
 
     const floor = new THREE.Mesh(
       new THREE.PlaneGeometry(200, 200),
-      new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.9, metalness: 0.0 })
+      new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.9, metalness: 0.0 }),
     );
-    const grid = new THREE.GridHelper(200, 40, 0x666666, 0x333333);
+
+    let floorTextureDisposables: THREE.Texture[] = [];
 
     floor.rotation.x = -Math.PI / 2;
     floor.receiveShadow = true;
     scene.add(floor);
-    scene.add(grid);
+
+    void (async () => {
+      try {
+        const texLoader = new THREE.TextureLoader();
+        const [colorMap, normalMap, roughnessMap] = await Promise.all([
+          texLoader.loadAsync(`${PAVING_TEXTURE_BASE}_color.jpg`),
+          texLoader.loadAsync(`${PAVING_TEXTURE_BASE}_normal_gl.jpg`),
+          texLoader.loadAsync(`${PAVING_TEXTURE_BASE}_roughness.jpg`),
+        ]);
+
+        if (!mounted) {
+          colorMap.dispose();
+          normalMap.dispose();
+          roughnessMap.dispose();
+          return;
+        }
+
+        colorMap.colorSpace = THREE.SRGBColorSpace;
+        tileTexture(colorMap, FLOOR_TEXTURE_REPEAT, FLOOR_TEXTURE_REPEAT);
+        tileTexture(normalMap, FLOOR_TEXTURE_REPEAT, FLOOR_TEXTURE_REPEAT);
+        tileTexture(roughnessMap, FLOOR_TEXTURE_REPEAT, FLOOR_TEXTURE_REPEAT);
+
+        const maxAniso = renderer.capabilities.getMaxAnisotropy();
+        colorMap.anisotropy = maxAniso;
+        normalMap.anisotropy = maxAniso;
+        roughnessMap.anisotropy = maxAniso;
+
+        const pavedMaterial = new THREE.MeshStandardMaterial({
+          map: colorMap,
+          normalMap: normalMap,
+          roughnessMap: roughnessMap,
+          metalness: 0,
+          roughness: 1,
+        });
+
+        floorTextureDisposables = [colorMap, normalMap, roughnessMap];
+
+        const previousMat = floor.material as THREE.MeshStandardMaterial;
+        floor.material = pavedMaterial;
+        previousMat.dispose();
+      } catch (err) {
+        console.error('Paving floor textures failed — check files under public/textures/paving/', err);
+      }
+    })();
 
     const orbitControls = new OrbitControls(camera, renderer.domElement);
     orbitControls.enableDamping = true;
@@ -94,7 +147,7 @@ export default function YBotAdventureScene() {
 
     const loader = new GLTFLoader();
     loader.load(
-      '/ybot.glb',
+      '/models/ybot.glb',
       (gltf) => {
         if (!mounted) return;
         const { scene: model, animations } = gltf;
@@ -367,6 +420,11 @@ export default function YBotAdventureScene() {
       window.removeEventListener('blur', onWindowBlur);
       orbitControls.dispose();
       renderer.dispose();
+
+      floorTextureDisposables.forEach((t) => t.dispose());
+      floorTextureDisposables = [];
+      const floorMat = floor.material as THREE.MeshStandardMaterial;
+      floorMat.dispose();
 
       if (container.contains(renderer.domElement)) {
         container.removeChild(renderer.domElement);
